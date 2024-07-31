@@ -1,0 +1,22 @@
+[package]
+name = "ws2812-hal-delay"
+version = "0.1.0"
+authors = [
+    "David Sawatzke <david-sawatzke@users.noreply.github.com>",
+    "Bart Massey <bart.massey@gmail.com>",
+]
+edition = "2021"
+categories = [
+    "embedded",
+    "no-std",
+    "hardware-support"]
+keywords = ["smart-leds", "ws2812"]
+description = "embedded-hal delay-based driver for ws2812 leds"
+documentation = "https://docs.rs/crate/ws2812-timer-delay"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+# repository = "https://github.com/smart-leds-rs/ws2812-timer-delay-rs"
+
+[dependencies]
+smart-leds-trait = "0.2"
+embedded-hal = "1.0"
