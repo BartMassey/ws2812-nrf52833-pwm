@@ -16,8 +16,23 @@ use embedded_hal::{digital::OutputPin, delay::DelayNs};
 use smart_leds_trait::{SmartLedsWrite, RGB8};
 
 pub struct Ws2812<DELAY, PIN> {
-    delay: DELAY,
+    _delay: DELAY,
     pin: PIN,
+}
+
+#[inline(always)]
+fn spin_wait(ns: u32) {
+    let count = ns / (4 * 64);
+    unsafe {
+        core::arch::asm!(
+            "2:",
+            "sub {0}, #1",
+            "cmp {0}, #0",
+            "bne 2b",
+            in(reg) count,
+            options(nomem, nostack),
+        );
+    }
 }
 
 impl<DELAY, PIN> Ws2812<DELAY, PIN>
@@ -26,24 +41,28 @@ where
     PIN: OutputPin,
 {
     /// The delay has to have resolution of at least 3 MHz.
-    pub fn new(delay: DELAY, mut pin: PIN) -> Ws2812<DELAY, PIN> {
+    pub fn new(_delay: DELAY, mut pin: PIN) -> Ws2812<DELAY, PIN> {
         pin.set_low().ok();
-        Self { delay, pin }
+        Self { _delay, pin }
     }
 
     /// Write a single color for ws2812 devices.
     fn write_byte(&mut self, mut data: u8) {
         for _ in 0..8 {
-            if (data & 0x80) != 0 {
+            if (data & 0x80) == 0 {
                 self.pin.set_high().ok();
-                self.delay.delay_ns(800);
+                //self.delay.delay_ns(400);
+                spin_wait(400);
                 self.pin.set_low().ok();
-                self.delay.delay_ns(450);
+                //self.delay.delay_ns(850);
+                spin_wait(850);
             } else {
                 self.pin.set_high().ok();
-                self.delay.delay_ns(400);
+                //self.delay.delay_ns(800);
+                spin_wait(800);
                 self.pin.set_low().ok();
-                self.delay.delay_ns(850);
+                //self.delay.delay_ns(450);
+                spin_wait(450);
             }
             data <<= 1;
         }
@@ -60,16 +79,16 @@ where
     /// Write all the items of an iterator to a ws2812 strip
     fn write<T, I>(&mut self, iterator: T) -> Result<(), Self::Error>
     where
-        T: Iterator<Item = I>,
+        T: IntoIterator<Item = I>,
         I: Into<Self::Color>,
     {
+        spin_wait(100_000);
         for item in iterator {
-            // minimum 50 µs for reset.
-            self.delay.delay_us(50);
             let item = item.into();
             self.write_byte(item.g);
             self.write_byte(item.r);
             self.write_byte(item.b);
+            spin_wait(100_000);
         }
         Ok(())
     }
