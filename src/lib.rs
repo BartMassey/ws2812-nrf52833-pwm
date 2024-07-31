@@ -20,9 +20,9 @@ pub struct Ws2812<DELAY, PIN> {
     pin: PIN,
 }
 
-#[inline(always)]
+#[inline(never)]
 fn spin_wait(ns: u32) {
-    let count = ns / (4 * 64);
+    let count = ns / (4 * 32);
     unsafe {
         core::arch::asm!(
             "2:",
