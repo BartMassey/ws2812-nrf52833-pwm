@@ -22,7 +22,7 @@ pub struct Ws2812<DELAY, PIN> {
 
 #[inline(never)]
 fn spin_wait(ns: u32) {
-    let count = ns / (4 * 32);
+    let count = ns / (5 * 32);
     unsafe {
         core::arch::asm!(
             "2:",
@@ -46,22 +46,18 @@ where
         Self { _delay, pin }
     }
 
-    /// Write a single color for ws2812 devices.
-    fn write_byte(&mut self, mut data: u8) {
-        for _ in 0..8 {
-            if (data & 0x80) == 0 {
+    /// Write a full grb color for ws2812 devices.
+    fn write_color(&mut self, mut data: u32) {
+        for _ in 0..24 {
+            if (data & 0x800000) == 0 {
                 self.pin.set_high().ok();
-                //self.delay.delay_ns(400);
                 spin_wait(400);
                 self.pin.set_low().ok();
-                //self.delay.delay_ns(850);
                 spin_wait(850);
             } else {
                 self.pin.set_high().ok();
-                //self.delay.delay_ns(800);
                 spin_wait(800);
                 self.pin.set_low().ok();
-                //self.delay.delay_ns(450);
                 spin_wait(450);
             }
             data <<= 1;
@@ -85,9 +81,10 @@ where
         spin_wait(100_000);
         for item in iterator {
             let item = item.into();
-            self.write_byte(item.g);
-            self.write_byte(item.r);
-            self.write_byte(item.b);
+            let color = ((item.g as u32) << 16)
+                | ((item.r as u32) << 8)
+                | (item.b as u32);
+            self.write_color(color);
             spin_wait(100_000);
         }
         Ok(())
