@@ -1,15 +1,12 @@
-# Ws2812 driver with embedded-hal DelayNs based delays
+# WS2812 driver for the nRF52833 using PWM
 
-For usage with the
+This code is intended for usage with the
 [smart-leds](https://github.com/smart-leds-rs/smart-leds)
 crate.
 
-If your timer/micro is to slow (e.g. all/some leds are white
-or display the wrong color), you may wish to enable the
-`slow` feature. It will remove any delay for the high part
-of the zero bits. This may be too short for some led strips,
-which may display wrong data. In that case, you might want
-to clock higher or use another driver.
+This driver utilizes a PWM and delay source from the Nordic
+nRF52833 to drive a pin on the device with the signals
+necessary for a WS2812-family "Neopixel" smart LED chain.
 
 ## License
 
@@ -20,9 +17,8 @@ Licensed under either of
 
 at your option.
 
-## Contribution
+# Acknowledgements
 
-Unless you explicitly state otherwise, any contribution
-intentionally submitted for inclusion in the work by you, as
-defined in the Apache-2.0 license, shall be dual licensed as
-above, without any additional terms or conditions.
+David Sawatzke <david-sawatzke@users.noreply.github.com>
+wrote a driver clear back in 2017 that was the starting
+point for this work. Greatly appreciated.
