@@ -1,29 +1,25 @@
-//! # Use ws2812 leds with embedded-hal 1.0 Delay.
+//! # Use ws2812 leds with nRF52833 PWM.
 //!
 //! - For usage with `smart-leds`
 //! - Implements the `SmartLedsWrite` trait
-//!
-//! The Delay given to `new()` must run at an absolute
-//! minimum of 3 MHz to work.
-//!
-//! If it's too slow (e.g.  e.g. all/some leds are white or
-//! display the wrong color) you may want to try the `slow`
-//! feature.
 
 #![no_std]
 
 use core::ops::DerefMut;
 
-use cortex_m::{delay::Delay, peripheral::{SYST, syst::SystClkSource}};
+use embedded_hal::delay::DelayNs;
 use embedded_dma as dma;
 use nrf52833_hal::{gpio, pwm};
 use smart_leds_trait::{SmartLedsWrite, RGB8};
 
 type PwmPin = gpio::Pin<gpio::Output<gpio::PushPull>>;
 
-pub struct Ws2812<PWM: pwm::Instance + core::fmt::Debug> {
+pub struct Ws2812<PWM, DELAY>
+where
+    PWM: pwm::Instance + core::fmt::Debug,
+{
     pwm: Option<pwm::Pwm<PWM>>,
-    delay: Delay,
+    delay: DELAY,
 }
 
 /// WS2812 0-bit high time in ns.
@@ -81,11 +77,12 @@ unsafe impl dma::ReadBuffer for DmaBuffer {
 }
     
 
-impl<PWM> Ws2812<PWM>
+impl<PWM, DELAY> Ws2812<PWM, DELAY>
 where
     PWM: pwm::Instance + core::fmt::Debug,
+    DELAY: DelayNs,
 {
-    pub fn new(pwm: PWM, syst: SYST, pin: PwmPin) -> Self {
+    pub fn new(pwm: PWM, delay: DELAY, pin: PwmPin) -> Self {
         let pwm = pwm::Pwm::new(pwm);
         pwm
             // output the waveform on the speaker pin
@@ -113,8 +110,6 @@ where
             .one_shot()
             // Enable but don't start.
             .enable();
-
-        let delay = Delay::with_source(syst, 64_000_000, SystClkSource::Core);
 
         Self { pwm: Some(pwm), delay }
     }
@@ -151,9 +146,10 @@ where
     }
 }
 
-impl<PWM> SmartLedsWrite for Ws2812<PWM>
+impl<PWM, DELAY> SmartLedsWrite for Ws2812<PWM, DELAY>
 where
     PWM: pwm::Instance + core::fmt::Debug,
+    DELAY: DelayNs,
 {
     type Error = ();
     type Color = RGB8;
