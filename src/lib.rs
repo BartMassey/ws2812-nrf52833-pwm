@@ -1,3 +1,4 @@
+#![doc(html_root_url = "https://docs.rs/ws2812-nrf52833-pwm/0.1.0")]
 //! # Use ws2812 leds with nRF52833 PWM.
 //!
 //! - For usage with `smart-leds`
@@ -14,12 +15,27 @@ use smart_leds_trait::{SmartLedsWrite, RGB8};
 
 type PwmPin = gpio::Pin<gpio::Output<gpio::PushPull>>;
 
+/// Error during WS2812 driver operation.
+pub enum Error<PWM, DELAY> {
+    /// PWM error.
+    PwmError(pwm::Error, PWM, pwm::Pins, DELAY),
+}
+
+impl<PWM, DELAY> core::fmt::Debug for Error<PWM, DELAY> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::PwmError(err, _, _, _) => write!(f, "pwm error: {:?}", err)
+        }
+    }
+}
+
+/// Proxy for driving a WS2812-family device using PWM.
 pub struct Ws2812<PWM, DELAY>
 where
-    PWM: pwm::Instance + core::fmt::Debug,
+    PWM: pwm::Instance,
 {
     pwm: Option<pwm::Pwm<PWM>>,
-    delay: DELAY,
+    delay: Option<DELAY>,
 }
 
 /// WS2812 0-bit high time in ns.
@@ -52,7 +68,6 @@ const PWM_PERIOD: u16 = to_ticks(FRAME_NS) as u16;
 
 type Seq = [u16; 24];
 
-#[derive(Debug)]
 struct DmaBuffer(Seq);
 
 impl core::ops::Deref for DmaBuffer {
@@ -75,13 +90,13 @@ unsafe impl dma::ReadBuffer for DmaBuffer {
         (self.0.as_ptr(), self.0.len())
     }
 }
-    
 
 impl<PWM, DELAY> Ws2812<PWM, DELAY>
 where
     PWM: pwm::Instance + core::fmt::Debug,
     DELAY: DelayNs,
 {
+    /// Set up for WS2812 bit transfers.
     pub fn new(pwm: PWM, delay: DELAY, pin: PwmPin) -> Self {
         let pwm = pwm::Pwm::new(pwm);
         pwm
@@ -111,11 +126,11 @@ where
             // Enable but don't start.
             .enable();
 
-        Self { pwm: Some(pwm), delay }
+        Self { pwm: Some(pwm), delay: Some(delay) }
     }
 
     /// Write a full grb color for ws2812 devices.
-    fn write_color(&mut self, data: u32) {
+    fn write_color(&mut self, data: u32) -> Result<(), Error<PWM, DELAY>> {
         let mut buffer = DmaBuffer([0u16; 24]);
         let nbuffer = buffer.len();
         for (i, sample) in buffer.deref_mut().iter_mut().enumerate() {
@@ -129,7 +144,10 @@ where
             Some(buffer),
             none,
             true,
-        ).unwrap();
+        ).map_err(|(err, pwm, _, _)| {
+            let (pwm, pin) = pwm.free();
+            Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
+        })?;
 
         loop {
             if seq.is_event_triggered(pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0)) {
@@ -142,7 +160,13 @@ where
         let (_, _, pwm) = seq.split();
         self.pwm = Some(pwm);
 
-        self.delay.delay_us(RESET_TIME);
+        if let Some(ref mut delay) = self.delay {
+            delay.delay_us(RESET_TIME);
+        } else {
+            panic!();
+        }
+
+        Ok(())
     }
 }
 
@@ -151,7 +175,7 @@ where
     PWM: pwm::Instance + core::fmt::Debug,
     DELAY: DelayNs,
 {
-    type Error = ();
+    type Error = Error<PWM, DELAY>;
     type Color = RGB8;
     /// Write all the items of an iterator to a ws2812 strip
     fn write<T, I>(&mut self, iterator: T) -> Result<(), Self::Error>
@@ -164,7 +188,7 @@ where
             let color = ((item.g as u32) << 16)
                 | ((item.r as u32) << 8)
                 | (item.b as u32);
-            self.write_color(color);
+            self.write_color(color)?;
         }
         Ok(())
     }
