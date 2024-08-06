@@ -8,8 +8,8 @@
 
 use core::ops::DerefMut;
 
-use embedded_hal::delay::DelayNs;
 use embedded_dma as dma;
+use embedded_hal::delay::DelayNs;
 use nrf52833_hal::{gpio, pwm};
 use smart_leds_trait::{SmartLedsWrite, RGB8};
 
@@ -24,7 +24,7 @@ pub enum Error<PWM, DELAY> {
 impl<PWM, DELAY> core::fmt::Debug for Error<PWM, DELAY> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::PwmError(err, _, _, _) => write!(f, "pwm error: {:?}", err)
+            Error::PwmError(err, _, _, _) => write!(f, "pwm error: {:?}", err),
         }
     }
 }
@@ -126,7 +126,10 @@ where
             // Enable but don't start.
             .enable();
 
-        Self { pwm: Some(pwm), delay: Some(delay) }
+        Self {
+            pwm: Some(pwm),
+            delay: Some(delay),
+        }
     }
 
     /// Write a full grb color for ws2812 devices.
@@ -140,14 +143,12 @@ where
 
         let pwm = self.pwm.take().unwrap();
         let none = <Option<DmaBuffer>>::None;
-        let seq = pwm.load(
-            Some(buffer),
-            none,
-            true,
-        ).map_err(|(err, pwm, _, _)| {
-            let (pwm, pin) = pwm.free();
-            Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
-        })?;
+        let seq = pwm
+            .load(Some(buffer), none, true)
+            .map_err(|(err, pwm, _, _)| {
+                let (pwm, pin) = pwm.free();
+                Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
+            })?;
 
         loop {
             if seq.is_event_triggered(pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0)) {
@@ -185,9 +186,7 @@ where
     {
         for item in iterator {
             let item = item.into();
-            let color = ((item.g as u32) << 16)
-                | ((item.r as u32) << 8)
-                | (item.b as u32);
+            let color = ((item.g as u32) << 16) | ((item.r as u32) << 8) | (item.b as u32);
             self.write_color(color)?;
         }
         Ok(())
