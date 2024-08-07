@@ -13,7 +13,7 @@ use embedded_hal::delay::DelayNs;
 use nrf52833_hal::{gpio, pwm};
 use smart_leds_trait::{SmartLedsWrite, RGB8};
 
-type PwmPin = gpio::Pin<gpio::Output<gpio::PushPull>>;
+pub type PwmPin = gpio::Pin<gpio::Output<gpio::PushPull>>;
 
 /// Error during WS2812 driver operation.
 pub enum Error<PWM, DELAY> {
@@ -93,7 +93,7 @@ unsafe impl dma::ReadBuffer for DmaBuffer {
 
 impl<PWM, DELAY> Ws2812<PWM, DELAY>
 where
-    PWM: pwm::Instance + core::fmt::Debug,
+    PWM: pwm::Instance,
     DELAY: DelayNs,
 {
     /// Set up for WS2812 bit transfers.
@@ -173,7 +173,7 @@ where
 
 impl<PWM, DELAY> SmartLedsWrite for Ws2812<PWM, DELAY>
 where
-    PWM: pwm::Instance + core::fmt::Debug,
+    PWM: pwm::Instance,
     DELAY: DelayNs,
 {
     type Error = Error<PWM, DELAY>;

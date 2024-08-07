@@ -536,8 +536,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "ws2812-nrf52833-hal-pwm"
-version = "0.1.0"
+name = "ws2812-nrf52833-pwm"
+version = "0.2.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",

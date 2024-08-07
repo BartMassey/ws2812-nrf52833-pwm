@@ -3,7 +3,7 @@
 
 use smart_leds::RGB8;
 use smart_leds_trait::SmartLedsWrite;
-use ws2812_nrf52833_hal_pwm::Ws2812;
+use ws2812_nrf52833_pwm::Ws2812;
 
 use cortex_m_rt::entry;
 use embedded_hal::delay::DelayNs;

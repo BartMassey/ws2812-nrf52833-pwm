@@ -1,15 +1,15 @@
 [package]
-name = "ws2812-nrf52833-hal-pwm"
-version = "0.1.0"
+name = "ws2812-nrf52833-pwm"
+version = "0.2.0"
 authors = ["Bart Massey <bart.massey@gmail.com>"]
 edition = "2021"
 categories = [ "embedded", "no-std", "hardware-support"]
 keywords = ["smart-leds", "ws2812", "nrf52833"]
 description = "nrf52833 PWM driver for ws2812 leds"
-documentation = "https://docs.rs/crate/ws2812-nrf52833-hal"
+documentation = "https://docs.rs/crate/ws2812-nrf52833-pwm"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/BartMassey/ws2812-nrf52833-hal"
+repository = "https://github.com/BartMassey/ws2812-nrf52833-pwm"
 
 [dependencies]
 embedded-dma = "0.2.0"
