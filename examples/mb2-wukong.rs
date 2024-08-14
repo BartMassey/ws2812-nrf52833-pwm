@@ -26,8 +26,7 @@ fn main() -> ! {
         .edge
         .e16
         .into_push_pull_output_drive(Level::Low, DriveConfig::HighDrive0HighDrive1);
-    let delay = Timer::new(board.TIMER1);
-    let mut ws2812 = Ws2812::new(board.PWM0, delay, pin.degrade());
+    let mut ws2812 = Ws2812::new(board.PWM0, pin.degrade());
 
     let leds = [
         RGB8::new(255u8, 0, 0),
