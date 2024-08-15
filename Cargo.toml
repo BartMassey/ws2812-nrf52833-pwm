@@ -18,6 +18,7 @@ smart-leds-trait = "0.3"
 
 [dependencies.nrf52833-hal]
 version = "0.18"
+path = "/local/src/old/nrf-hal/nrf52833-hal"
 default-features = false
 
 [features]

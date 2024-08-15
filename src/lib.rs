@@ -42,15 +42,9 @@ const T0H_NS: u32 = 400;
 const T1H_NS: u32 = 800;
 /// WS2812 total frame time in ns.
 const FRAME_NS: u32 = 1250;
-/// WS2812 frame reset time in µs (minimum 50µs).
-//const RESET_TIME: u32 = 60;
-/// WS2812b/c frame reset time in µs (minimum 250µs).
-const RESET_TIME: u32 = 260;
 
 /// PWM clock in MHz.
 const PWM_CLOCK: u32 = 16;
-/// WS2812 frame reset time in ticks.
-const RESET_TICKS: u32 = PWM_CLOCK * RESET_TIME;
 
 const fn to_ticks(ns: u32) -> u32 {
     ns * PWM_CLOCK / 1000
@@ -113,6 +107,15 @@ where
             .enable_channel(pwm::Channel::C0)
             // Enable sample group.
             .enable_group(pwm::Group::G0)
+            // Be sure to be advancing the thing.
+            .set_step_mode(pwm::StepMode::Auto)
+            // Set maximum duty cycle = PWM period in ticks.
+            .set_max_duty(PWM_PERIOD)
+            // Set various delays.
+            .set_seq_refresh(pwm::Seq::Seq0, 0)
+            .set_seq_end_delay(pwm::Seq::Seq0, 0)
+            // Play once per activation.
+            .one_shot()
             // Enable but don't start.
             .enable();
 
@@ -121,41 +124,27 @@ where
         }
     }
 
-    /// Write a full grb color for ws2812 devices.
+    /// Write color to a ws2812 device.
     fn write_color(&mut self, data: u32) -> Result<(), Error<PWM>> {
         let mut buffer = DmaBuffer([0u16; 24]);
-        let nbuffer = buffer.len();
         for (i, sample) in buffer.deref_mut().iter_mut().enumerate() {
-            let b = (data >> (nbuffer - i - 1)) & 1;
+            let b = (data >> (24 - i - 1)) & 1;
             *sample = BITS[b as usize];
         }
 
         let pwm = self.pwm.take().unwrap();
-        pwm
-            // Be sure to be advancing the thing.
-            .set_step_mode(pwm::StepMode::Auto)
-            // Set maximum duty cycle = PWM period in ticks.
-            .set_max_duty(PWM_PERIOD)
-            // Set various delays.
-            .set_seq_refresh(pwm::Seq::Seq0, 0)
-            .set_seq_end_delay(pwm::Seq::Seq0, RESET_TICKS)
-            .set_seq_refresh(pwm::Seq::Seq1, 0)
-            .set_seq_end_delay(pwm::Seq::Seq1, 0)
-            // Play once per activation.
-            .repeat(1);
-
-        let empty_buffer = DmaBuffer([0x8000]);
         let seq = pwm
-            .load(Some(buffer), Some(empty_buffer), false)
+            .load(Some(buffer), <Option<DmaBuffer<0>>>::None, false)
             .map_err(|(err, pwm, _, _)| {
                 let (pwm, pin) = pwm.free();
                 Error::PwmError(err, pwm, pin)
             })?;
 
-        seq.reset_event(pwm::PwmEvent::LoopsDone);
+        let end_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+        seq.reset_event(end_event);
         seq.start_seq(pwm::Seq::Seq0);
         loop {
-            if seq.is_event_triggered(pwm::PwmEvent::LoopsDone) {
+            if seq.is_event_triggered(end_event) {
                 break;
             }
         }

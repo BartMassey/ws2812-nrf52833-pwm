@@ -218,7 +218,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26d84d7858bbe6cdd89c429be9aa62f2820d1a271e66580df22fe9093bb63c51"
 dependencies = [
  "embedded-hal 1.0.0",
- "nrf52833-hal",
+ "nrf52833-hal 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tiny-led-matrix",
 ]
 
@@ -249,6 +249,26 @@ checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 [[package]]
 name = "nrf-hal-common"
 version = "0.18.0"
+dependencies = [
+ "cast",
+ "cfg-if",
+ "cortex-m",
+ "embedded-dma",
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0",
+ "embedded-io",
+ "embedded-storage",
+ "fixed",
+ "nb 1.1.0",
+ "nrf-usbd",
+ "nrf52833-pac",
+ "rand_core",
+ "void",
+]
+
+[[package]]
+name = "nrf-hal-common"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c134de1f2f0191aed3fc24d3831da8808d1e636b06edf81a5717103095f625d"
 dependencies = [
@@ -256,7 +276,6 @@ dependencies = [
  "cfg-if",
  "cortex-m",
  "embedded-dma",
- "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
  "embedded-io",
  "embedded-storage",
@@ -283,10 +302,18 @@ dependencies = [
 [[package]]
 name = "nrf52833-hal"
 version = "0.18.0"
+dependencies = [
+ "nrf-hal-common 0.18.0",
+ "nrf52833-pac",
+]
+
+[[package]]
+name = "nrf52833-hal"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12fab00e54c93792dddaf623a021feaa84933bbad12c3b76f08ea201df91f36c"
 dependencies = [
- "nrf-hal-common",
+ "nrf-hal-common 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "nrf52833-pac",
 ]
 
@@ -544,7 +571,7 @@ dependencies = [
  "embedded-dma",
  "embedded-hal 1.0.0",
  "microbit-v2",
- "nrf52833-hal",
+ "nrf52833-hal 0.18.0",
  "panic-rtt-target",
  "rtt-target",
  "smart-leds",

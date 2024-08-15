@@ -15,7 +15,7 @@ use microbit::{
     },
 };
 use panic_rtt_target as _;
-use rtt_target::rtt_init_print;
+use rtt_target::{rtt_init_print, rprintln};
 
 #[entry]
 fn main() -> ! {
@@ -45,6 +45,7 @@ fn main() -> ! {
             cur_leds[i] = leds[(i + start) % nleds];
         }
         ws2812.write(cur_leds).unwrap();
+        rprintln!("written");
         timer.delay_ms(500);
         start = (start + 1) % nleds;
     }
