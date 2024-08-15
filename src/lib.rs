@@ -29,13 +29,14 @@ impl<PWM, DELAY> core::fmt::Debug for Error<PWM, DELAY> {
     }
 }
 
-/// Proxy for driving a WS2812-family device using PWM.
-pub struct Ws2812<PWM, DELAY>
+/// Proxy for driving a chain of `N` WS2812-family device using PWM.
+pub struct Ws2812<const N: usize, PWM, DELAY>
 where
     PWM: pwm::Instance,
 {
     pwm: Option<pwm::Pwm<PWM>>,
     delay: Option<DELAY>,
+    buf: Option<DmaBuffer<N>>,
 }
 
 /// WS2812 0-bit high time in ns.
@@ -44,8 +45,8 @@ const T0H_NS: u32 = 400;
 const T1H_NS: u32 = 800;
 /// WS2812 total frame time in ns.
 const FRAME_NS: u32 = 1250;
-/// WS2812 frame reset time in µs (minimum 50µs).
-const RESET_TIME: u32 = 60;
+/// WS2812 frame reset time in µs (minimum 250µs for some BC).
+const RESET_TIME: u32 = 260;
 
 /// PWM clock in MHz.
 const PWM_CLOCK: u32 = 16;
@@ -63,35 +64,41 @@ const BITS: [u16; 2] = [
 ];
 /// Total PWM period in ticks.
 const PWM_PERIOD: u16 = to_ticks(FRAME_NS) as u16;
-/// Number of PWM ticks to wait after end of bits for reset.
+/// Number of PWM ticks to wait for reset.
 //const RESET_TICKS: u32 = to_ticks(RESET_TIME);
 
-type Seq = [u16; 24];
+type Seq<const N: usize> = [u16; N];
 
-struct DmaBuffer(Seq);
+struct DmaBuffer<const N: usize>(Seq<N>);
 
-impl core::ops::Deref for DmaBuffer {
-    type Target = Seq;
+impl<const N: usize> Default for DmaBuffer<N> {
+    fn default() -> Self {
+        DmaBuffer([0; N])
+    }
+}
+
+impl<const N: usize> core::ops::Deref for DmaBuffer<N> {
+    type Target = Seq<N>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for DmaBuffer {
+impl<const N: usize> DerefMut for DmaBuffer<N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-unsafe impl dma::ReadBuffer for DmaBuffer {
+unsafe impl<const N: usize> dma::ReadBuffer for DmaBuffer<N> {
     type Word = u16;
     unsafe fn read_buffer(&self) -> (*const Self::Word, usize) {
         (self.0.as_ptr(), self.0.len())
     }
 }
 
-impl<PWM, DELAY> Ws2812<PWM, DELAY>
+impl<const N: usize, PWM, DELAY> Ws2812<N, PWM, DELAY>
 where
     PWM: pwm::Instance,
     DELAY: DelayNs,
@@ -128,13 +135,14 @@ where
 
         Self {
             pwm: Some(pwm),
+            buf: Some(DmaBuffer::default()),
             delay: Some(delay),
         }
     }
 
     /// Write a full grb color for ws2812 devices.
     fn write_color(&mut self, data: u32) -> Result<(), Error<PWM, DELAY>> {
-        let mut buffer = DmaBuffer([0u16; 24]);
+        let mut buffer = self.buf.take().unwrap();
         let nbuffer = buffer.len();
         for (i, sample) in buffer.deref_mut().iter_mut().enumerate() {
             let b = (data >> (nbuffer - i - 1)) & 1;
@@ -142,36 +150,31 @@ where
         }
 
         let pwm = self.pwm.take().unwrap();
-        let none = <Option<DmaBuffer>>::None;
+        let none = <Option<DmaBuffer<N>>>::None;
         let seq = pwm
-            .load(Some(buffer), none, true)
+            .load(Some(buffer), none, false)
             .map_err(|(err, pwm, _, _)| {
                 let (pwm, pin) = pwm.free();
                 Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
             })?;
 
+        let end_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+        seq.reset_event(end_event);
         loop {
-            if seq.is_event_triggered(pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0)) {
+            if seq.is_event_triggered(end_event) {
                 break;
             }
         }
-        seq.stop();
-        seq.reset_event(pwm::PwmEvent::LoopsDone);
 
-        let (_, _, pwm) = seq.split();
+        let (buffer, _, pwm) = seq.split();
         self.pwm = Some(pwm);
-
-        if let Some(ref mut delay) = self.delay {
-            delay.delay_us(RESET_TIME);
-        } else {
-            panic!();
-        }
+        self.buf = buffer;
 
         Ok(())
     }
 }
 
-impl<PWM, DELAY> SmartLedsWrite for Ws2812<PWM, DELAY>
+impl<const N: usize, PWM, DELAY> SmartLedsWrite for Ws2812<N, PWM, DELAY>
 where
     PWM: pwm::Instance,
     DELAY: DelayNs,
@@ -184,6 +187,12 @@ where
         T: IntoIterator<Item = I>,
         I: Into<Self::Color>,
     {
+        if let Some(ref mut delay) = self.delay {
+            delay.delay_us(RESET_TIME);
+        } else {
+            panic!();
+        }
+
         for item in iterator {
             let item = item.into();
             let color = ((item.g as u32) << 16) | ((item.r as u32) << 8) | (item.b as u32);
