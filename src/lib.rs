@@ -9,33 +9,31 @@
 use core::ops::DerefMut;
 
 use embedded_dma as dma;
-use embedded_hal::delay::DelayNs;
 use nrf52833_hal::{gpio, pwm};
 use smart_leds_trait::{SmartLedsWrite, RGB8};
 
 pub type PwmPin = gpio::Pin<gpio::Output<gpio::PushPull>>;
 
 /// Error during WS2812 driver operation.
-pub enum Error<PWM, DELAY> {
+pub enum Error<PWM> {
     /// PWM error.
-    PwmError(pwm::Error, PWM, pwm::Pins, DELAY),
+    PwmError(pwm::Error, PWM, pwm::Pins),
 }
 
-impl<PWM, DELAY> core::fmt::Debug for Error<PWM, DELAY> {
+impl<PWM> core::fmt::Debug for Error<PWM> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::PwmError(err, _, _, _) => write!(f, "pwm error: {:?}", err),
+            Error::PwmError(err, _, _) => write!(f, "pwm error: {:?}", err),
         }
     }
 }
 
 /// Proxy for driving a chain of `N` WS2812-family device using PWM.
-pub struct Ws2812<const N: usize, PWM, DELAY>
+pub struct Ws2812<const N: usize, PWM>
 where
     PWM: pwm::Instance,
 {
     pwm: Option<pwm::Pwm<PWM>>,
-    delay: Option<DELAY>,
     buf: Option<DmaBuffer<N>>,
 }
 
@@ -45,15 +43,19 @@ const T0H_NS: u32 = 400;
 const T1H_NS: u32 = 800;
 /// WS2812 total frame time in ns.
 const FRAME_NS: u32 = 1250;
-/// WS2812 frame reset time in µs (minimum 250µs for some BC).
-const RESET_TIME: u32 = 300;
+/// WS2812 frame reset time in µs (minimum 250µs for some BC, plus slop).
+const RESET_TIME: u32 = 270;
 
 /// PWM clock in MHz.
 const PWM_CLOCK: u32 = 16;
 
+/// Convert nanoseconds to PWM ticks, rounding.
 const fn to_ticks(ns: u32) -> u32 {
     (ns * PWM_CLOCK + 500) / 1000
 }
+
+/// WS2812 frame reset time in PWM ticks.
+const RESET_TICKS: u32 = to_ticks(RESET_TIME);
 
 /// Samples for PWM array, with flip bits.
 const BITS: [u16; 2] = [
@@ -96,13 +98,12 @@ unsafe impl<const N: usize> dma::ReadBuffer for DmaBuffer<N> {
     }
 }
 
-impl<const N: usize, PWM, DELAY> Ws2812<N, PWM, DELAY>
+impl<const N: usize, PWM> Ws2812<N, PWM>
 where
     PWM: pwm::Instance,
-    DELAY: DelayNs,
 {
     /// Set up for WS2812 bit transfers.
-    pub fn new(pwm: PWM, delay: DELAY, pin: PwmPin) -> Self {
+    pub fn new(pwm: PWM, pin: PwmPin) -> Self {
         let pwm = pwm::Pwm::new(pwm);
         pwm
             // output the waveform on the speaker pin
@@ -113,25 +114,21 @@ where
             .set_counter_mode(pwm::CounterMode::Up)
             // Read duty cycle values from sequence.
             .set_load_mode(pwm::LoadMode::Common)
-            // Be sure to be advancing the thing.
-            .set_step_mode(pwm::StepMode::Auto)
             // Set maximum duty cycle = PWM period in ticks.
             .set_max_duty(PWM_PERIOD);
 
         Self {
             pwm: Some(pwm),
             buf: Some(DmaBuffer::default()),
-            delay: Some(delay),
         }
     }
 }
 
-impl<const N: usize, PWM, DELAY> SmartLedsWrite for Ws2812<N, PWM, DELAY>
+impl<const N: usize, PWM> SmartLedsWrite for Ws2812<N, PWM>
 where
     PWM: pwm::Instance,
-    DELAY: DelayNs,
 {
-    type Error = Error<PWM, DELAY>;
+    type Error = Error<PWM>;
     type Color = RGB8;
     /// Write all the items of an iterator to a ws2812 strip
     fn write<T, I>(&mut self, iterator: T) -> Result<(), Self::Error>
@@ -139,10 +136,6 @@ where
         T: IntoIterator<Item = I>,
         I: Into<Self::Color>,
     {
-        let mut delay = self.delay.take().unwrap();
-        delay.delay_us(RESET_TIME);
-        self.delay = Some(delay);
-
         let mut buffer = self.buf.take().unwrap();
 
         for (item, locs) in iterator.into_iter().zip(buffer.chunks_mut(24)) {
@@ -156,28 +149,33 @@ where
 
         let pwm = self.pwm.take().unwrap();
         pwm
+            // Be sure to be advancing the thing.
+            .set_step_mode(pwm::StepMode::Auto)
             // Set no delay between samples.
             .set_seq_refresh(pwm::Seq::Seq0, 0)
-            // Set reset delay at end of sequence.
-            //.set_seq_end_delay(pwm::Seq::Seq0, RESET_TICKS)
-            .set_seq_end_delay(pwm::Seq::Seq0, 0)
+            // Set reset delay at end of sequence 0.
+            .set_seq_end_delay(pwm::Seq::Seq0, RESET_TICKS)
+            // Set no delay between samples.
+            .set_seq_refresh(pwm::Seq::Seq1, 0)
+            // Set no delay at end of sequence 1.
+            .set_seq_end_delay(pwm::Seq::Seq1, 0)
             // Enable sample channel.
             .enable_channel(pwm::Channel::C0)
             // Enable sample group.
             .enable_group(pwm::Group::G0)
             // Run this waveform once.
-            .one_shot()
+            .repeat(1)
             // Enable now.
             .enable();
-        let none = <Option<DmaBuffer<N>>>::None;
+        let pre = DmaBuffer([0x8000]);
         let seq = pwm
-            .load(Some(buffer), none, false)
+            .load(Some(pre), Some(buffer), false)
             .map_err(|(err, pwm, _, _)| {
                 let (pwm, pin) = pwm.free();
-                Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
+                Error::PwmError(err, pwm, pin)
             })?;
 
-        let end_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+        let end_event = pwm::PwmEvent::LoopsDone;
         seq.reset_event(end_event);
         seq.start_seq(pwm::Seq::Seq0);
         loop {
@@ -187,7 +185,7 @@ where
             }
         }
 
-        let (buffer, _, pwm) = seq.split();
+        let (_, buffer, pwm) = seq.split();
         pwm.stop();
         self.pwm = Some(pwm);
         self.buf = buffer;

@@ -24,6 +24,7 @@ default-features = false
 rt = ["nrf52833-hal/rt"]
 embedded-hal-02 = ["nrf52833-hal/embedded-hal-02"]
 defmt-03 = ["embedded-hal/defmt-03"]
+tick = []
 
 [dev-dependencies]
 panic-rtt-target = "0.1.3"
