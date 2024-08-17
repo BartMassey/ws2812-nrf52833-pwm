@@ -46,13 +46,13 @@ const T1H_NS: u32 = 800;
 /// WS2812 total frame time in ns.
 const FRAME_NS: u32 = 1250;
 /// WS2812 frame reset time in µs (minimum 250µs for some BC).
-const RESET_TIME: u32 = 260;
+const RESET_TIME: u32 = 300;
 
 /// PWM clock in MHz.
 const PWM_CLOCK: u32 = 16;
 
 const fn to_ticks(ns: u32) -> u32 {
-    ns * PWM_CLOCK / 1000
+    (ns * PWM_CLOCK + 500) / 1000
 }
 
 /// Samples for PWM array, with flip bits.
@@ -64,8 +64,6 @@ const BITS: [u16; 2] = [
 ];
 /// Total PWM period in ticks.
 const PWM_PERIOD: u16 = to_ticks(FRAME_NS) as u16;
-/// Number of PWM ticks to wait for reset.
-//const RESET_TICKS: u32 = to_ticks(RESET_TIME);
 
 type Seq<const N: usize> = [u16; N];
 
@@ -118,59 +116,13 @@ where
             // Be sure to be advancing the thing.
             .set_step_mode(pwm::StepMode::Auto)
             // Set maximum duty cycle = PWM period in ticks.
-            .set_max_duty(PWM_PERIOD)
-            // Set no delay between samples.
-            .set_seq_refresh(pwm::Seq::Seq0, 0)
-            // Set reset delay at end of sequence.
-            //.set_seq_end_delay(pwm::Seq::Seq0, RESET_TICKS)
-            .set_seq_end_delay(pwm::Seq::Seq0, 0)
-            // Enable sample channel.
-            .enable_channel(pwm::Channel::C0)
-            // Enable sample group.
-            .enable_group(pwm::Group::G0)
-            // Play once per activation.
-            .one_shot()
-            // Enable but don't start.
-            .enable();
+            .set_max_duty(PWM_PERIOD);
 
         Self {
             pwm: Some(pwm),
             buf: Some(DmaBuffer::default()),
             delay: Some(delay),
         }
-    }
-
-    /// Write a full grb color for ws2812 devices.
-    fn write_color(&mut self, data: u32) -> Result<(), Error<PWM, DELAY>> {
-        let mut buffer = self.buf.take().unwrap();
-        let nbuffer = buffer.len();
-        for (i, sample) in buffer.deref_mut().iter_mut().enumerate() {
-            let b = (data >> (nbuffer - i - 1)) & 1;
-            *sample = BITS[b as usize];
-        }
-
-        let pwm = self.pwm.take().unwrap();
-        let none = <Option<DmaBuffer<N>>>::None;
-        let seq = pwm
-            .load(Some(buffer), none, false)
-            .map_err(|(err, pwm, _, _)| {
-                let (pwm, pin) = pwm.free();
-                Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
-            })?;
-
-        let end_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
-        seq.reset_event(end_event);
-        loop {
-            if seq.is_event_triggered(end_event) {
-                break;
-            }
-        }
-
-        let (buffer, _, pwm) = seq.split();
-        self.pwm = Some(pwm);
-        self.buf = buffer;
-
-        Ok(())
     }
 }
 
@@ -187,17 +139,59 @@ where
         T: IntoIterator<Item = I>,
         I: Into<Self::Color>,
     {
-        if let Some(ref mut delay) = self.delay {
-            delay.delay_us(RESET_TIME);
-        } else {
-            panic!();
-        }
+        let mut delay = self.delay.take().unwrap();
+        delay.delay_us(RESET_TIME);
+        self.delay = Some(delay);
 
-        for item in iterator {
+        let mut buffer = self.buf.take().unwrap();
+
+        for (item, locs) in iterator.into_iter().zip(buffer.chunks_mut(24)) {
             let item = item.into();
             let color = ((item.g as u32) << 16) | ((item.r as u32) << 8) | (item.b as u32);
-            self.write_color(color)?;
+            for (i, loc) in locs.iter_mut().enumerate() {
+                let b = (color >> (24 - i - 1)) & 1;
+                *loc = BITS[b as usize];
+            }
         }
+
+        let pwm = self.pwm.take().unwrap();
+        pwm
+            // Set no delay between samples.
+            .set_seq_refresh(pwm::Seq::Seq0, 0)
+            // Set reset delay at end of sequence.
+            //.set_seq_end_delay(pwm::Seq::Seq0, RESET_TICKS)
+            .set_seq_end_delay(pwm::Seq::Seq0, 0)
+            // Enable sample channel.
+            .enable_channel(pwm::Channel::C0)
+            // Enable sample group.
+            .enable_group(pwm::Group::G0)
+            // Run this waveform once.
+            .one_shot()
+            // Enable now.
+            .enable();
+        let none = <Option<DmaBuffer<N>>>::None;
+        let seq = pwm
+            .load(Some(buffer), none, false)
+            .map_err(|(err, pwm, _, _)| {
+                let (pwm, pin) = pwm.free();
+                Error::PwmError(err, pwm, pin, self.delay.take().unwrap())
+            })?;
+
+        let end_event = pwm::PwmEvent::SeqEnd(pwm::Seq::Seq0);
+        seq.reset_event(end_event);
+        seq.start_seq(pwm::Seq::Seq0);
+        loop {
+            if seq.is_event_triggered(end_event) {
+                seq.stop();
+                break;
+            }
+        }
+
+        let (buffer, _, pwm) = seq.split();
+        pwm.stop();
+        self.pwm = Some(pwm);
+        self.buf = buffer;
+
         Ok(())
     }
 }

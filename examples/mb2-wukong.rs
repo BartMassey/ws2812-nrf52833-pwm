@@ -26,18 +26,24 @@ fn main() -> ! {
         .edge
         .e16
         .into_push_pull_output_drive(Level::Low, DriveConfig::HighDrive0HighDrive1);
-    let delay = Timer::new(board.TIMER1);
-    let mut ws2812 = Ws2812::new(board.PWM0, delay, pin.degrade());
+    // let delay = Timer::new(board.TIMER1);
+    let delay = nrf52833_hal::Delay::new(board.SYST);
+    let mut ws2812: Ws2812<{4 * 24}, _, _> = Ws2812::new(board.PWM0, delay, pin.degrade());
 
     let leds = [
-        RGB8::new(255u8, 0, 0),
-        RGB8::new(0, 255u8, 0),
-        RGB8::new(0, 0, 255u8),
-        RGB8::new(255u8, 255u8, 255u8),
-        RGB8::new(255u8, 255u8, 0),
-        RGB8::new(0, 255u8, 255u8),
-        RGB8::new(255u8, 0, 255u8),
+        RGB8::new(255, 0, 0),
+        RGB8::new(0, 255, 0),
+        RGB8::new(0, 0, 255),
+        RGB8::new(255, 255, 0),
+        RGB8::new(0, 255, 255),
+        RGB8::new(255, 0, 255),
+        RGB8::new(20, 20, 20),
+        RGB8::new(0, 0, 0),
     ];
+
+    ws2812.write(leds[..4].iter().cloned()).unwrap();
+    timer.delay_ms(3000);
+
     let nleds = leds.len();
     let mut start = 0;
     loop {
@@ -45,6 +51,10 @@ fn main() -> ! {
         for i in 0..4 {
             cur_leds[i] = leds[(i + start) % nleds];
         }
+        let tmp = cur_leds[0];
+        cur_leds[0] = RGB8::new(255, 255, 255);
+        ws2812.write(cur_leds).unwrap();
+        cur_leds[0] = tmp;
         ws2812.write(cur_leds).unwrap();
         timer.delay_ms(500);
         start = (start + 1) % nleds;
