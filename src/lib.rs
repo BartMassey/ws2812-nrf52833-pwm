@@ -1,8 +1,15 @@
-#![doc(html_root_url = "https://docs.rs/ws2812-nrf52833-pwm/0.1.0")]
-//! # Use ws2812 leds with nRF52833 PWM.
-//!
-//! - For usage with `smart-leds`
-//! - Implements the `SmartLedsWrite` trait
+#![doc(html_root_url = "https://docs.rs/ws2812-nrf52833-pwm/0.2.0")]
+/*! # Use ws2812 leds with nRF52833 PWM.
+
+This code drives a WS2812-family LED chain (should work with
+WS2812, WS2812B/C) using a PWM unit of the nRF52833. The PWM
+unit makes it easy to get the precise fast timing needed for
+these chips.
+
+This crate is intended for usage with the `smart-leds`
+crate: it implements the `SmartLedsWrite` trait.
+
+*/
 
 #![no_std]
 
@@ -11,8 +18,6 @@ use core::ops::DerefMut;
 use embedded_dma as dma;
 use nrf52833_hal::{gpio, pwm};
 use smart_leds_trait::{SmartLedsWrite, RGB8};
-
-pub type PwmPin = gpio::Pin<gpio::Output<gpio::PushPull>>;
 
 /// Error during WS2812 driver operation.
 pub enum Error<PWM> {
@@ -28,7 +33,9 @@ impl<PWM> core::fmt::Debug for Error<PWM> {
     }
 }
 
-/// Proxy for driving a chain of `N` WS2812-family device using PWM.
+/// Driver for a chain of WS2812-family devices using
+/// PWM. The constant `N` should be 24 times the number of
+/// chips in the chain.
 pub struct Ws2812<const N: usize, PWM>
 where
     PWM: pwm::Instance,
@@ -102,8 +109,20 @@ impl<const N: usize, PWM> Ws2812<N, PWM>
 where
     PWM: pwm::Instance,
 {
-    /// Set up for WS2812 bit transfers.
-    pub fn new(pwm: PWM, pin: PwmPin) -> Self {
+    /// Set up WS2812 chain with PWM and an output pin.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let board = microbit::Board::take().unwrap();
+    /// let ws2812: Ws2812<{4 * 24}, _, _> = Ws2812::new(board.PWM0, board.edge.e16.degrade());
+    /// ```
+    pub fn new<PinMode>(pwm: PWM, pin: gpio::Pin<PinMode>) -> Self {
+        // Use high drive to get faster rise/fall times. Probably unnecessary.
+        let pin = pin.into_push_pull_output_drive(
+            gpio::Level::Low,
+            gpio::DriveConfig::HighDrive0HighDrive1,
+        );
         let pwm = pwm::Pwm::new(pwm);
         pwm
             // output the waveform on the speaker pin

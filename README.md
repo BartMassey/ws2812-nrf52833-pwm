@@ -27,5 +27,5 @@ at your option.
 # Acknowledgements
 
 David Sawatzke <david-sawatzke@users.noreply.github.com>
-wrote a driver clear back in 2017 that was the starting
-point for this work. Greatly appreciated.
+wrote a driver way back in 2017 that was the starting point
+for this work. Greatly appreciated.
