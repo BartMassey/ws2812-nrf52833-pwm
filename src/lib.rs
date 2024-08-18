@@ -119,10 +119,8 @@ where
     /// ```
     pub fn new<PinMode>(pwm: PWM, pin: gpio::Pin<PinMode>) -> Self {
         // Use high drive to get faster rise/fall times. Probably unnecessary.
-        let pin = pin.into_push_pull_output_drive(
-            gpio::Level::Low,
-            gpio::DriveConfig::HighDrive0HighDrive1,
-        );
+        let pin = pin
+            .into_push_pull_output_drive(gpio::Level::Low, gpio::DriveConfig::HighDrive0HighDrive1);
         let pwm = pwm::Pwm::new(pwm);
         pwm
             // output the waveform on the speaker pin
