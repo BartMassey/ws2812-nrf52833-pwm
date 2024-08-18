@@ -9,10 +9,7 @@ use cortex_m_rt::entry;
 use embedded_hal::delay::DelayNs;
 use microbit::{
     board::Board,
-    hal::{
-        gpio::{DriveConfig, Level},
-        Timer,
-    },
+    hal::Timer,
 };
 use panic_rtt_target as _;
 use rtt_target::rtt_init_print;
@@ -24,11 +21,8 @@ fn main() -> ! {
     rtt_init_print!();
     let board = Board::take().unwrap();
     let mut timer = Timer::new(board.TIMER0);
-    let pin = board
-        .edge
-        .e16
-        .into_push_pull_output_drive(Level::Low, DriveConfig::HighDrive0HighDrive1);
-    let mut ws2812: Ws2812<{4 * 24}, _> = Ws2812::new(board.PWM0, pin.degrade());
+    let pin = board.edge.e16.degrade();
+    let mut ws2812: Ws2812<{4 * 24}, _> = Ws2812::new(board.PWM0, pin);
 
     let leds = [
         RGB8::new(255, 0, 0),
