@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/ws2812-nrf52833-pwm/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/ws2812-nrf52833-pwm/0.2.1")]
 /*! # Use ws2812 leds with nRF52833 PWM.
 
 This code drives a WS2812-family LED chain (should work with
@@ -62,7 +62,7 @@ const fn to_ticks(ns: u32) -> u32 {
 }
 
 /// WS2812 frame reset time in PWM ticks.
-const RESET_TICKS: u32 = to_ticks(RESET_TIME);
+const RESET_TICKS: u32 = to_ticks(RESET_TIME * 1000);
 
 /// Samples for PWM array, with flip bits.
 const BITS: [u16; 2] = [

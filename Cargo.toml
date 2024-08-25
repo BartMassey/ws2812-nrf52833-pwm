@@ -1,6 +1,6 @@
 [package]
 name = "ws2812-nrf52833-pwm"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Bart Massey <bart.massey@gmail.com>"]
 edition = "2021"
 categories = [ "embedded", "no-std", "hardware-support"]
